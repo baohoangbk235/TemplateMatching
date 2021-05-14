@@ -140,4 +140,4 @@ cython_debug/
 dataset/
 results/
 weights/
-.ipynb
+*.ipynb
