@@ -12,11 +12,12 @@ from torch.utils.data import  DataLoader
 from tqdm import tqdm 
 import numpy as np 
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
+from sklearn.cluster import KMeans
 from collections import Counter
 import cv2 
 import matplotlib.pyplot as plt 
 import os
-from models.classifier.KNN import KNN 
+import pickle 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-p", "--model_path", help="path to checkpoint of feature extraction model", type=str)
@@ -42,46 +43,53 @@ def most_frequent(List):
     occurence_count = Counter(List)
     return occurence_count.most_common(1)[0][0]
 
-def predict(list_embs, list_labels):
-    nbrs = NearestNeighbors(n_neighbors=1, algorithm='ball_tree').fit(list_embs)
-    distances, indices = nbrs.kneighbors(list_embs)
-    all_top5 = np.array(list_labels)[indices]
-    results = []
-    for i, top5 in enumerate(all_top5):
-        result = most_frequent(top5)
-        results.append(result)
-    
+def predict(nn, X_train, y_train, X_test):
+    nbrs = KNeighborsClassifier(n_neighbors=nn).fit(X_train, y_train)
+    # distances, indices = nbrs.kneighbors(X_test)
+    # all_top5 = y_train[indices]
+    # results = []
+    # for top5 in all_top5:
+    #     result = most_frequent(list(top5))
+    #     results.append(result)
+    results = nbrs.predict(X_test)
     return results
 
-def show(f, result=False):
+def KMean_predict(X_train, y_train, X_test):
+    kmeans = KMeans(n_clusters=8, random_state=0).fit(X_train, y_train)
+    results = kmeans.predict(X_test)
+    return results
+
+def show(f, positive=False):
     img = cv2.imread(f[0])
     plt.figure(figsize=(20,20))
     plt.xlabel("{} - Ground truth: {} - Predict: {}".format(os.path.basename(f[0]), int2label[f[2]], int2label[f[1]]), fontsize=18)
     plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-    if result:
+    if positive:
         plt.savefig(f'results/trues/{os.path.basename(f[0])}')
     else:
         plt.savefig(f'results/falses/{os.path.basename(f[0])}')
     
 def test():
-    model = Network(20)
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
-    list_embs, list_labels, list_paths = get_trained_embedding(model, optimizer, scheduler, CONFIG)
-    list_labels = [int(label.cpu().detach().numpy()) for label in list_labels]
-    results = predict(list_embs, list_labels)
-    count = 0
-    samples = []
-    false = []
-    for i, result in enumerate(results):
-        if result == list_labels[i]:
-            positive = True 
-            count += 1
-        else:
-            positive = False
-        show([list_paths[i], result, list_labels[i]], result=positive)
+    with open('train.pkl', 'rb') as f:
+        train_data = pickle.load(f)
+    train_embs, train_labels, train_paths = train_data["X"], train_data["y"], train_data["path"]
+    with open('test.pkl', 'rb') as f:
+        test_data = pickle.load(f)
+    test_embs, test_labels, test_paths = test_data["X"], test_data["y"], test_data["path"]
+    for i in range(1,2):    
+        results = predict(i, train_embs, train_labels, test_embs)
+        count = 0
+        samples = []
+        false = []
+        for i, result in enumerate(results):
+            if result == test_labels[i]:
+                pos = True 
+                count += 1
+            else:
+                pos = False
+            show([test_paths[i], test_labels[i], result], positive=pos)
+        print(count/len(results))
 
-    print(count/len(results))
 
 if __name__ == "__main__":
     test()

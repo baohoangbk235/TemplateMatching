@@ -13,6 +13,7 @@ import torch.nn as nn
 from torch.utils.data import  DataLoader
 from tqdm import tqdm 
 import numpy as np 
+import pickle 
 
 class Identity(nn.Module):
     def __init__(self):
@@ -85,10 +86,19 @@ def get_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
         anchors = anchors.to(CONFIG["device"])
         anchor_emb = model(anchors)  
         list_embs.extend(list(anchor_emb.cpu().detach().numpy()))
-        list_labels.extend(labels)
+        list_labels.extend(list(labels.cpu().detach().numpy()))
         list_paths.extend(paths)
         del anchor_emb
+        
     print("[INFO] Get embeddings done!")
+    data = {
+        "X": np.array(list_embs),
+        "y": np.array(list_labels),
+        "path": list_paths
+    }
+    with open("test.pkl", "wb") as f:
+        pickle.dump(data, f)
+    
     return list_embs, list_labels, list_paths 
 
 if __name__ == "__main__":
