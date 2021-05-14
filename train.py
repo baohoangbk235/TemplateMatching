@@ -23,6 +23,13 @@ from utils import get_labels, get_config
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", help="data augmentation", type=str, default="config.yaml")
+parser.add_argument("-lr", "--learning_rate", help="learning rate", type=float, default=5e-4)
+parser.add_argument("-w", "--weight_decay", help="weight decay", type=float, default=1e-6)
+parser.add_argument("-st", "--step_change_lr", help="step change learning rate", type=int, default=10)
+parser.add_argument("-bs", "--batch_size", help="batch size", type=int, default=8)
+parser.add_argument("-ep", "--epochs", help="epochs", type=int, default=30)
+parser.add_argument("-l", "--label_path", help="epochs", type=str, default="dataset/labels.txt")
+parser.add_argument("-d", "--device", help="device", type=str, default="cuda")
 
 args = parser.parse_args()
 
@@ -31,7 +38,7 @@ warnings.filterwarnings('ignore')
 CONFIG = get_config(args.config)
 
 def train_one_epoch(epoch, dataloader, model, optimizer, scheduler, criterion, loss_history):
-    device = CONFIG["device"]
+    device = args.device
     with tqdm(dataloader, unit="batch") as tepoch:
         best_loss = 99999
         running_loss = []
@@ -65,7 +72,7 @@ def train_one_epoch(epoch, dataloader, model, optimizer, scheduler, criterion, l
 
         scheduler.step()
 
-        print(f'Epoch {epoch}/{CONFIG["num_epochs"]} : Loss: {np.mean(running_loss)}')
+        print(f'Epoch {epoch}/{args.epochs} : Loss: {np.mean(running_loss)}')
 
         loss_history.append(np.mean(running_loss))
         
@@ -95,24 +102,26 @@ def train():
     if not os.path.exists(CONFIG["model_path"]):
         os.mkdir(CONFIG["model_path"])
 
-    num_classes = len(os.listdir(CONFIG["train_data"]))
-    label2int, int2label = get_labels(CONFIG['labels'])
+    label2int, int2label = get_labels(args.label_path)
+    num_classes = len(int2label)
+
     model = Network(20)
-    model.to(CONFIG["device"])
+    model.to(args.device)
     model.train()
 
     triplet_loss = TripletLoss()
-    optimizer = optim.Adam(model.parameters(), lr=CONFIG["learning_rate"], weight_decay=CONFIG["weight_decay"])
 
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=CONFIG["step_change_lr"], gamma=0.5)
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
 
-    traindataset = TemplateDataset(CONFIG["train_data"], transforms=get_train_transforms(), show=False)  
+    scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
 
-    trainloader = DataLoader(traindataset, batch_size=CONFIG["batch_size"], shuffle=True, collate_fn=collate_fn)
+    traindataset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_train_transforms(), show=False)  
+
+    trainloader = DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
     loss_history = []
 
-    for epoch in range(CONFIG["num_epochs"]):
+    for epoch in range(args.epochs):
         train_one_epoch(epoch, trainloader, model, optimizer, scheduler, triplet_loss, loss_history)
 
     plot_training_history(loss_history)

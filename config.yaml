@@ -1,14 +1,6 @@
 REFINER_WEIGHT: weights/pretrained/craft_refiner_CTW1500.pth
 CRAFT_WEIGHT: weights/pretrained/1117_23.833.pth
-DATA_DIR: dataset/train/
-OUT_DIR: dataset/preprocessed_train/
 labels: dataset/labels.txt
-num_epochs: 30   
-train_data: dataset/train/
-val_data: dataset/val/
-test_data: dataset/test/
-batch_size: 8
-learning_rate: 5e-4
-weight_decay: 1e-6
-step_change_lr: 3
-device: cuda
+train_data: dataset/preprocessed_train/
+val_data: dataset/val/preprocessed_val/
+test_data: dataset/preprocessed_test/

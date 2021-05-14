@@ -63,7 +63,7 @@ class Classifier(nn.Module):
         return x
 
 def get_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
-    if test:
+    if not test:
         data_path = CONFIG['train_data']
     else:
         data_path = CONFIG['test_data']
