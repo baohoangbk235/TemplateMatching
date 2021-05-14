@@ -30,6 +30,8 @@ parser.add_argument("-bs", "--batch_size", help="batch size", type=int, default=
 parser.add_argument("-ep", "--epochs", help="epochs", type=int, default=30)
 parser.add_argument("-l", "--label_path", help="epochs", type=str, default="dataset/labels.txt")
 parser.add_argument("-d", "--device", help="device", type=str, default="cuda")
+parser.add_argument("-o", "--optimizer", help="optimizer", type=str, default="adam")
+
 
 args = parser.parse_args()
 
@@ -111,7 +113,10 @@ def train():
 
     triplet_loss = TripletLoss()
 
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    if args.optimizer == "adam":
+        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    else:
+        optimizer = optim.SGD(net.parameters(), lr=0.005, momentum=0.9)
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
 

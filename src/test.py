@@ -15,7 +15,8 @@ from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from collections import Counter
 import cv2 
 import matplotlib.pyplot as plt 
-import os 
+import os
+from models.classifier.KNN import KNN 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-p", "--model_path", help="path to checkpoint of feature extraction model", type=str)
