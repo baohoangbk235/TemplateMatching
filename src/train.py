@@ -20,6 +20,8 @@ from datetime import datetime
 from network import Network, Identity, TripletLoss
 from dataset import TemplateDataset, collate_fn, get_train_transforms
 from utils import get_labels, get_config
+from tensorboard_logger import log_value, configure
+configure("runs/run-1234", flush_secs=5)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", help="data augmentation", type=str, default="config.yaml")
@@ -31,6 +33,7 @@ parser.add_argument("-ep", "--epochs", help="epochs", type=int, default=30)
 parser.add_argument("-l", "--label_path", help="epochs", type=str, default="dataset/labels.txt")
 parser.add_argument("-d", "--device", help="device", type=str, default="cuda")
 parser.add_argument("-o", "--optimizer", help="optimizer", type=str, default="adam")
+parser.add_argument("-p", "--path", help="path to checkpoint", type=str, default=None)
 
 
 args = parser.parse_args()
@@ -65,7 +68,6 @@ def train_one_epoch(epoch, dataloader, model, optimizer, scheduler, criterion, l
             optimizer.step()
 
             running_loss.append(loss.cpu().detach().numpy())
-
             tepoch.set_postfix(running_loss=np.mean(running_loss))
 
             del anchor_emb
@@ -73,6 +75,7 @@ def train_one_epoch(epoch, dataloader, model, optimizer, scheduler, criterion, l
             del neg_emb
 
         scheduler.step()
+        log_value('running_loss', loss, i)
 
         print(f'Epoch {epoch}/{args.epochs} : Loss: {np.mean(running_loss)}')
 
@@ -97,6 +100,8 @@ def plot_training_history(loss_history):
     plt.ylabel('Loss')
     plt.plot(loss_history)
     fig.savefig("{}/history.png".format(CONFIG["model_path"]), dpi = 100, facecolor='white')
+    with open(f'{CONFIG["model_path"]}/logs.txt', 'a') as f:
+        f.write(f'Epoch {len(loss_history)}/{args.epochs} : Loss: {loss_history[-1]}\n')
 
 
 def train():
@@ -110,6 +115,7 @@ def train():
     model = Network(20)
     model.to(args.device)
     model.train()
+    
 
     triplet_loss = TripletLoss()
 
@@ -119,12 +125,15 @@ def train():
         optimizer = optim.SGD(net.parameters(), lr=0.005, momentum=0.9)
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
-
+    
     traindataset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_train_transforms(), show=False)  
 
     trainloader = DataLoader(traindataset, batch_size=args.batch_size, shuffle=True, collate_fn=collate_fn)
 
     loss_history = []
+
+    if (args.path):
+            model, optimizer, scheduler, loss_history = load_checkpoint(checkpoint, model, optimizer, scheduler)
 
     for epoch in range(args.epochs):
         train_one_epoch(epoch, trainloader, model, optimizer, scheduler, triplet_loss, loss_history)

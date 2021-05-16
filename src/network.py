@@ -28,9 +28,9 @@ class Network(nn.Module):
         self.num_classes = num_classes
         self.model = models.vgg16(pretrained=True)
         num_ftrs = self.model.classifier[0].in_features
-        layers = [nn.Linear(num_ftrs, 128), nn.ReLU(inplace=True), nn.Linear(128, num_classes)]
+        layers = [nn.Linear(num_ftrs, 1024), nn.ReLU(inplace=True), nn.Dropout(0.5, inplace=False), nn.Linear(1024, 256), nn.ReLU(inplace=True), nn.Dropout(0.5, inplace=False), nn.Linear(256, 64)]
         self.model.classifier = nn.Sequential(*layers)
-
+        
     def forward(self, x):
         return self.model(x)
 
@@ -49,10 +49,11 @@ class TripletLoss(nn.Module):
         return losses.mean()
 
 class Classifier(nn.Module):
-    def __init__(self):
+    def __init__(self, nb_classes):
         super().__init__()
         self.fc1 = nn.Linear(20, 10)
-        self.fc2 = nn.Linear(10, 8)
+        self.fc2 = nn.Linear(10, 10)
+        self.fc3 = nn.Linear(10, nb_classes)
         self.dropout = nn.Dropout(p=0.5)
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
@@ -60,10 +61,11 @@ class Classifier(nn.Module):
     def forward(self, x):
         x = self.relu(self.fc1(x))
         x = self.relu(self.fc2(x))
-        x = self.softmax(x)
+        x = self.fc3(x)
+        # x = self.softmax(x)
         return x
 
-def get_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
+def save_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
     if not test:
         data_path = CONFIG['train_data']
     else:
@@ -96,10 +98,11 @@ def get_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
         "y": np.array(list_labels),
         "path": list_paths
     }
-    with open("test.pkl", "wb") as f:
+    filename = "test.pkl" if test else "train.pkl"
+    with open(filename, "wb") as f:
         pickle.dump(data, f)
+
     
-    return list_embs, list_labels, list_paths 
 
 if __name__ == "__main__":
     net = Network(20)

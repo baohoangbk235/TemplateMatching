@@ -1,7 +1,7 @@
-from network import Classifier, Network, get_trained_embedding
+from network import Classifier, Network
 from dataset import EmbeddingDataset, TemplateDataset, collate_fn, collate_test, get_train_transforms
 import yaml 
-from utils import load_checkpoint, get_labels, get_config
+from utils import load_checkpoint, get_labels, get_config, get_trained_embeddings
 import argparse
 import re 
 from torch.optim import lr_scheduler
@@ -59,36 +59,63 @@ def KMean_predict(X_train, y_train, X_test):
     results = kmeans.predict(X_test)
     return results
 
+def FCpredict(X_test, y_test):
+    device = args.device
+    config = torch.load("/content/drive/MyDrive/DATN/weights/classifier/classifier_epoch_1400.pth")
+    net = Classifier(10)
+    net.load_state_dict(config["model_state_dict"])
+    net.eval()
+    net.to(device)
+
+    dataset = EmbeddingDataset(X_test, y_test)
+    loader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=collate_test)
+    correct = 0
+    total = 0
+    for i, (X, yhat) in enumerate(loader):
+        X = torch.stack([x for x in X], dim=0)
+        
+        yhat = torch.tensor(yhat, dtype=torch.long)
+        yhat = torch.stack([y for y in yhat], dim=0)
+        
+        X = X.to(device)
+        yhat = yhat.to(device)
+
+        y = net(X)
+
+        _, predicted = torch.max(y.data, 1)
+        correct += (predicted  == yhat).sum().item()
+        total += yhat.size(0)
+    print(correct/total)
+
+
 def show(f, positive=False):
     img = cv2.imread(f[0])
     plt.figure(figsize=(20,20))
-    plt.xlabel("{} - Ground truth: {} - Predict: {}".format(os.path.basename(f[0]), int2label[f[2]], int2label[f[1]]), fontsize=18)
+    plt.xlabel("{} - Ground truth: {} - Predict: {}".format(os.path.basename(f[0]), int2label[f[1]], int2label[f[2]]), fontsize=25)
     plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
     if positive:
         plt.savefig(f'results/trues/{os.path.basename(f[0])}')
     else:
         plt.savefig(f'results/falses/{os.path.basename(f[0])}')
     
+
 def test():
-    with open('train.pkl', 'rb') as f:
-        train_data = pickle.load(f)
-    train_embs, train_labels, train_paths = train_data["X"], train_data["y"], train_data["path"]
-    with open('test.pkl', 'rb') as f:
-        test_data = pickle.load(f)
-    test_embs, test_labels, test_paths = test_data["X"], test_data["y"], test_data["path"]
-    for i in range(1,2):    
-        results = predict(i, train_embs, train_labels, test_embs)
-        count = 0
-        samples = []
-        false = []
-        for i, result in enumerate(results):
-            if result == test_labels[i]:
-                pos = True 
-                count += 1
-            else:
-                pos = False
-            show([test_paths[i], test_labels[i], result], positive=pos)
-        print(count/len(results))
+    data = get_trained_embeddings()
+    FCpredict(data["test"][0], data["test"][1])
+
+    # for i in range(1,2):    
+    #     results = predict(i, train_embs, train_labels, test_embs)
+    #     count = 0
+    #     samples = []
+    #     false = []
+    #     for i, result in enumerate(results):
+    #         if result == test_labels[i]:
+    #             pos = True 
+    #             count += 1
+    #         else:
+    #             pos = False
+    #         show([test_paths[i], test_labels[i], result], positive=pos)
+    #     print(count/len(results))
 
 
 if __name__ == "__main__":

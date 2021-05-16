@@ -9,8 +9,9 @@ import torch
 import yaml
 import re 
 from torch.optim import lr_scheduler
-
+import pickle 
 warnings.filterwarnings('ignore')
+
 
 from craft_text_detector import (
     read_image,
@@ -22,6 +23,15 @@ from craft_text_detector import (
     empty_cuda_cache
 )
 from sklearn.cluster import KMeans
+
+def get_trained_embeddings():
+    with open('train.pkl', 'rb') as f:
+        train_data = pickle.load(f)
+    train_embs, train_labels, train_paths = train_data["X"], train_data["y"], train_data["path"]
+    with open('test.pkl', 'rb') as f:
+        test_data = pickle.load(f)
+    test_embs, test_labels, test_paths = test_data["X"], test_data["y"], test_data["path"]
+    return {"train": [train_embs, train_labels, train_paths], "test": [test_embs, test_labels, test_paths]}
 
 def extract_line(src):
     # Check if image is loaded fine
@@ -270,3 +280,54 @@ def get_config(config_path):
         CONFIG = yaml.load(f, Loader=loader) 
         print(CONFIG)
     return CONFIG
+
+
+
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience."""
+    def __init__(self, patience=7, verbose=False, delta=0, path='checkpoint.pt', trace_func=print):
+        """
+        Args:
+            patience (int): How long to wait after last time validation loss improved.
+                            Default: 7
+            verbose (bool): If True, prints a message for each validation loss improvement. 
+                            Default: False
+            delta (float): Minimum change in the monitored quantity to qualify as an improvement.
+                            Default: 0
+            path (str): Path for the checkpoint to be saved to.
+                            Default: 'checkpoint.pt'
+            trace_func (function): trace print function.
+                            Default: print            
+        """
+        self.patience = patience
+        self.verbose = verbose
+        self.counter = 0
+        self.best_score = None
+        self.early_stop = False
+        self.val_loss_min = np.Inf
+        self.delta = delta
+        self.path = path
+        self.trace_func = trace_func
+    def __call__(self, val_loss, model):
+
+        score = -val_loss
+
+        if self.best_score is None:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+        elif score < self.best_score + self.delta:
+            self.counter += 1
+            self.trace_func(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+            if self.counter >= self.patience:
+                self.early_stop = True
+        else:
+            self.best_score = score
+            self.save_checkpoint(val_loss, model)
+            self.counter = 0
+
+    def save_checkpoint(self, val_loss, model):
+        '''Saves model when validation loss decrease.'''
+        if self.verbose:
+            self.trace_func(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
+        torch.save(model.state_dict(), self.path)
+        self.val_loss_min = val_loss
