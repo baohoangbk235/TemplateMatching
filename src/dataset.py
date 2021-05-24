@@ -90,6 +90,39 @@ class EmbeddingDataset(Dataset):
     def __len__(self):
         return len(self.list_embs)
 
+class MyDataset(Dataset):
+    def __init__(self, root_dir, label2int, transforms=None, test=False):
+        self.root_dir = root_dir 
+        self.transforms = transforms 
+        self.list_images = []
+        self.test = test
+        self.label2int = label2int
+
+        if not os.path.exists(root_dir):
+            exit()
+
+        self.all_img_paths = []
+        self.all_labels = []
+        print("[INFO] Processing dataset ...")
+        for label in self.label2int.keys(): 
+            list_paths = glob.glob(os.path.join(self.root_dir, label, "*.jpg"))
+            self.all_img_paths.extend(list_paths)
+            self.all_labels.extend([self.label2int[label]] * len(list_paths))
+
+    def __len__(self):
+        return len(self.all_img_paths)
+    
+    def get_img(self, path):
+        path = path.replace(os.sep, '/')
+        img = cv2.imread(path)
+        return img 
+    
+    def __getitem__(self, index: int):
+        image = self.get_img(self.all_img_paths[index])
+        label = self.all_labels[index]
+        if self.transforms:
+            image = self.transforms(image=image)["image"]
+        return image, label
 
 
 def collate_fn(batch):

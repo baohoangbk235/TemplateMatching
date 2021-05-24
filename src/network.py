@@ -10,6 +10,7 @@ from torch.optim import lr_scheduler
 import torch.optim as optim
 import torch 
 import torch.nn as nn 
+import torch.nn.functional as F
 from torch.utils.data import  DataLoader
 from tqdm import tqdm 
 import numpy as np 
@@ -28,11 +29,12 @@ class Network(nn.Module):
         self.num_classes = num_classes
         self.model = models.vgg16(pretrained=True)
         num_ftrs = self.model.classifier[0].in_features
-        layers = [nn.Linear(num_ftrs, 1024), nn.ReLU(inplace=True), nn.Dropout(0.5, inplace=False), nn.Linear(1024, 256), nn.ReLU(inplace=True), nn.Dropout(0.5, inplace=False), nn.Linear(256, 64)]
+        layers = [nn.Linear(num_ftrs, 128), nn.ReLU(inplace=True), nn.Linear(128, num_classes)]
         self.model.classifier = nn.Sequential(*layers)
         
     def forward(self, x):
-        return self.model(x)
+        x =  self.model(x)
+        return F.normalize(x, p =2, dim = 1)
 
 class TripletLoss(nn.Module):
     def __init__(self, margin=1.0):
@@ -47,6 +49,53 @@ class TripletLoss(nn.Module):
         neg_distance = self.calc_euclidean(anchor, neg)
         losses = torch.relu(pos_distance - neg_distance + self.margin)
         return losses.mean()
+
+class HardBatchTripletLoss(nn.Module):
+    def __init__(self, margin=1.0):
+        super(HardBatchTripletLoss, self).__init__()
+        self.margin = margin
+
+    def _pairwise_distance(self, embeddings, squared=False):
+        dot_product = torch.matmul(embeddings, torch.transpose(embeddings, 0, 1))	
+        square_norm = torch.diagonal(dot_product, offset=0)
+        distance = torch.unsqueeze(square_norm, 0) - 2 * dot_product + torch.unsqueeze(square_norm, 1)
+        distance = torch.maximum(distance, torch.zeros(distance.shape))
+        if not squared:
+            mask = torch.tensor(torch.equal(distance, torch.zeros(distance.shape)), dtype=torch.float64)
+            distance = distance + mask * 1e-6
+            distance = torch.sqrt(distance)
+            distance = distance * (1.0 - mask)
+
+        return distance
+
+    def _get_anchor_positive_triplet_mask(self, labels):
+        labels_tensor = torch.tensor(labels)
+        labels_matrix = torch.stack(len(labels)*[labels_tensor], dim=1)
+        mask = (labels_matrix == torch.transpose(labels_matrix, 0, 1)).float()
+        mask = mask.fill_diagonal_(0)
+        return mask 
+
+    def _get_anchor_negative_triplet_mask(self, labels):
+        labels_tensor = torch.tensor(labels)
+        labels_matrix = torch.stack(len(labels)*[labels_tensor], dim=1)
+        mask = (labels_matrix != torch.transpose(labels_matrix, 0, 1)).float()
+        mask = mask.fill_diagonal_(0)
+        return mask 
+
+    def forward(self, labels, embeddings, squared=False):
+        pairwise_dist  = self._pairwise_distance(embeddings)
+        mask_anchor_positive = self._get_anchor_positive_triplet_mask(labels)
+        anchor_positive_dist = torch.multiply(mask_anchor_positive, pairwise_dist)
+        hardest_positive_dist = torch.max(anchor_positive_dist, axis=1, keepdims=True)[0]
+
+        mask_anchor_negative = self._get_anchor_negative_triplet_mask(labels)
+        max_anchor_negative_dist = torch.max(pairwise_dist, axis=1, keepdims=True)
+        anchor_negative_dist = pairwise_dist + max_anchor_negative_dist[0] * (1.0 - mask_anchor_negative)
+        hardest_negative_dist = torch.min(anchor_negative_dist, axis=1, keepdims=True)[0]
+        triplet_loss = torch.maximum(hardest_positive_dist - hardest_negative_dist + self.margin, torch.zeros(pairwise_dist.shape))
+        return triplet_loss.mean()
+    
+   
 
 class Classifier(nn.Module):
     def __init__(self, nb_classes):
@@ -65,44 +114,7 @@ class Classifier(nn.Module):
         # x = self.softmax(x)
         return x
 
-def save_trained_embedding(model, optimizer, scheduler, CONFIG, test=True):
-    if not test:
-        data_path = CONFIG['train_data']
-    else:
-        data_path = CONFIG['test_data']
-    
-    print("[INFO] Loading model to get embedding ...")
-    label2int, int2label = get_labels(CONFIG['labels'])
-    model, optimizer, scheduler, loss_history = load_checkpoint(CONFIG['model_path'], model, optimizer, scheduler)
-    model.eval()
-    model.to(CONFIG["device"])
-    traindataset = TemplateDataset(data_path, label2int, transforms=get_train_transforms(), test=True, show=True) 
-    trainloader = DataLoader(traindataset, batch_size=CONFIG["batch_size"], shuffle=True)
 
-    list_embs = []
-    list_labels = []
-    list_paths = []
-
-    for i, (images, labels, paths) in enumerate(trainloader):
-        anchors = images[0]
-        anchors = anchors.to(CONFIG["device"])
-        anchor_emb = model(anchors)  
-        list_embs.extend(list(anchor_emb.cpu().detach().numpy()))
-        list_labels.extend(list(labels.cpu().detach().numpy()))
-        list_paths.extend(paths)
-        del anchor_emb
-        
-    print("[INFO] Get embeddings done!")
-    data = {
-        "X": np.array(list_embs),
-        "y": np.array(list_labels),
-        "path": list_paths
-    }
-    filename = "test.pkl" if test else "train.pkl"
-    with open(filename, "wb") as f:
-        pickle.dump(data, f)
-
-    
 
 if __name__ == "__main__":
     net = Network(20)

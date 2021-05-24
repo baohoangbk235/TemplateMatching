@@ -15,11 +15,12 @@ from imgaug import augmenters as iaa
 import imgaug as ia
 import re
 import argparse
+import shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", "--augment", help="data augmentation", type=bool, default=False)
-parser.add_argument("-i", "--input_dir", help="data augmentation", type=str, default="test")
-parser.add_argument("-o", "--output_dir", help="data augmentation", type=str, default="preprocessed_test")
+parser.add_argument("-i", "--input_dir", help="data augmentation", type=str, default="/content/drive/MyDrive/DATN/dataset/test")
+parser.add_argument("-o", "--output_dir", help="data augmentation", type=str, default="/content/drive/MyDrive/DATN/dataset/preprocessed_test")
 
 args = parser.parse_args()
 
@@ -55,7 +56,9 @@ if __name__ == "__main__":
     print('[INFO] Loading weight done!')
     input_dir = args.input_dir
     output_dir = args.output_dir
-    os.makedirs(output_dir, exist_ok=True)
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+    os.mkdir(output_dir)
     for class_ in os.listdir(input_dir):
         print("[INFO] Processing class {}...".format(class_))        
         os.makedirs(os.path.join(output_dir, class_), exist_ok=True)

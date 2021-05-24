@@ -281,6 +281,9 @@ def get_config(config_path):
         print(CONFIG)
     return CONFIG
 
+def save_config(CONFIG, config_path):
+    with open(config_path, 'w') as f:
+        yaml.dump(CONFIG, f)
 
 
 class EarlyStopping:
