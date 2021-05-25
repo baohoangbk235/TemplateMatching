@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision import  models, transforms
-from dataset import EmbeddingDataset, TemplateDataset, collate_fn, collate_test, get_train_transforms
+from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
 import yaml 
 from utils import load_checkpoint, get_labels
 import argparse
@@ -100,7 +100,7 @@ class HardBatchTripletLoss(nn.Module):
 class Classifier(nn.Module):
     def __init__(self, nb_classes):
         super().__init__()
-        self.fc1 = nn.Linear(20, 10)
+        self.fc1 = nn.Linear(9, 10)
         self.fc2 = nn.Linear(10, 10)
         self.fc3 = nn.Linear(10, nb_classes)
         self.dropout = nn.Dropout(p=0.5)
