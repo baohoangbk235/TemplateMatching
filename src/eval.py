@@ -30,6 +30,7 @@ parser.add_argument("-d", "--device", help="device", type=str, default="cuda")
 parser.add_argument("-f", "--first_time", help="first time run testing", type=bool, default=False)
 parser.add_argument("--classifier", help="classifier", type=str, default="knn")
 parser.add_argument("--valid", help="valid or test", type=bool, default=False)
+parser.add_argument("--emb_size", help="embedding size", type=int, default=9)
 
 
 args = parser.parse_args()
@@ -85,19 +86,23 @@ def show(f, positive=False):
     else:
         plt.savefig(f'results/falses/{os.path.basename(f[0])}')
 
-def save_trained_embedding(model, optimizer, scheduler, CONFIG):
+def save_trained_embedding(CONFIG):
+    label2int, int2label = get_labels(args.label_path)
+    config = torch.load(args.model_path)
+    model = Network(args.emb_size)
+    model.load_state_dict(config["model_state_dict"])
+    model.eval()
+    model.to(args.device)
+
     for test in [True, False]:
         if not test:
             data_path = CONFIG['train_data']
         else:
             data_path = CONFIG['test_data']
         
-        label2int, int2label = get_labels(CONFIG['labels'])
-        model, optimizer, scheduler, loss_history = load_checkpoint(CONFIG['model_path'], model, optimizer, scheduler)
-        model.eval()
-        model.to(CONFIG["device"])
+       
         dataset = TemplateDataset(data_path, label2int, transforms=get_train_transforms(), test=True) 
-        loader = DataLoader(dataset, batch_size=CONFIG["batch_size"], collate_fn=collate_fn, shuffle=True)
+        loader = DataLoader(dataset, batch_size=args.batch_size, collate_fn=collate_fn, shuffle=True)
 
         list_embs = []
         list_labels = []
@@ -105,7 +110,7 @@ def save_trained_embedding(model, optimizer, scheduler, CONFIG):
 
         for i, (images, labels, paths) in enumerate(loader):
             anchors = torch.stack(images, axis=0)
-            anchors = anchors.to(CONFIG["device"])
+            anchors = anchors.to(args.device)
             anchor_emb = model(anchors)  
             list_embs.extend(list(anchor_emb.cpu().detach().numpy()))
             list_labels.extend(labels)
@@ -125,8 +130,5 @@ def save_trained_embedding(model, optimizer, scheduler, CONFIG):
 
 if __name__ == "__main__":
     if args.first_time:
-        model = Network(9)
-        optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
-        save_trained_embedding(model, optimizer, scheduler, CONFIG)
+        save_trained_embedding( CONFIG)
     test()
