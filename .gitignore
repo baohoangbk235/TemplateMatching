@@ -141,4 +141,4 @@ dataset/
 results/
 weights/
 *.ipynb
-runs/*.pkl
+*.pkl
