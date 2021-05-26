@@ -8,7 +8,6 @@ import albumentations as A
 from albumentations.pytorch.transforms import ToTensorV2
 import torch
 
-
 class EmbeddingDataset(Dataset):
     def __init__(self, list_embs, list_labels):
         self.list_embs = list_embs
@@ -21,11 +20,11 @@ class EmbeddingDataset(Dataset):
         return len(self.list_embs)
 
 class TemplateDataset(Dataset):
-    def __init__(self, root_dir, label2int, transforms=None, test=False):
+    def __init__(self, root_dir, label2int, transforms=None, mode="train"):
         self.root_dir = root_dir 
         self.transforms = transforms 
         self.list_images = []
-        self.test = test
+        self.mode = mode
         self.label2int = label2int
 
         if not os.path.exists(root_dir):
@@ -53,8 +52,11 @@ class TemplateDataset(Dataset):
         label = self.all_labels[index]
         if self.transforms:
             image = self.transforms(image=image)["image"]
-        if self.test:
+        if self.mode == "eval":
             return image, label, path 
+        elif self.mode == "test":
+            return image, path 
+
         return image, label
 
 
@@ -68,6 +70,15 @@ def collate_fn(batch):
         image_paths.append(paths)
         
     return images_list, labels_list, image_paths
+
+def collate_fn_test(batch):
+    images_list = []
+    image_paths = []
+    for images, paths in batch:
+        images_list.append(images)
+        image_paths.append(paths)
+        
+    return images_list, image_paths
 
 def get_train_transforms():
     return A.Compose([

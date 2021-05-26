@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from network import Classifier, Network
 from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
-from utils import load_checkpoint, get_labels, get_config, get_trained_embeddings
+from utils import load_checkpoint, get_labels, get_config
 import argparse
 from torch.optim import lr_scheduler
 import torch.optim as optim

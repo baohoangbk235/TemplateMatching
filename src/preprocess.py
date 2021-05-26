@@ -16,49 +16,40 @@ import imgaug as ia
 import re
 import argparse
 import shutil
+from craft_text_detector import (
+    read_image,
+    load_craftnet_model,
+    load_refinenet_model,
+    get_prediction,
+    export_detected_regions,
+    export_extra_results,
+    empty_cuda_cache
+)
+from lib import pipeline
+from utils import get_config
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-a", "--augment", help="data augmentation", type=bool, default=False)
-parser.add_argument("-i", "--input_dir", help="data augmentation", type=str, default="/content/drive/MyDrive/DATN/dataset/test")
-parser.add_argument("-o", "--output_dir", help="data augmentation", type=str, default="/content/drive/MyDrive/DATN/dataset/preprocessed_test")
+parser.add_argument("-i", "--input_dir", help="path to checkpoint of feature extraction model", type=str)
+parser.add_argument("-a", "--augment", help="path to checkpoint of feature extraction model", type=bool, default=False)
+parser.add_argument("-c", "--config", help="path to checkpoint of feature extraction model", type=str, default="config.yaml")
 
 args = parser.parse_args()
 
-loader = yaml.SafeLoader
-loader.add_implicit_resolver(
-    u'tag:yaml.org,2002:float',
-    re.compile(u'''^(?:
-     [-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?
-    |[-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)
-    |\\.[0-9_]+(?:[eE][-+][0-9]+)?
-    |[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*
-    |[-+]?\\.(?:inf|Inf|INF)
-    |\\.(?:nan|NaN|NAN))$''', re.X),
-    list(u'-+0123456789.'))
-with open('config.yaml') as file:
-    CONFIG = yaml.load(file, Loader=loader) 
-
-def pipeline(ori_img, craft_net, refine_net, show_img=False):
-    clt = KMeans(n_clusters = 3)
-    removed_line, extracted_line = extract_line(ori_img)
-    extracted_text = extract_text(removed_line, craft_net, refine_net, clt)
-    final = extract_dotline(extracted_text, extracted_line)
-    if show_img:
-        visualize(["Origin", "Final"], [ori_img, final], 1, 2)
-    return final
+CONFIG = get_config(args.config)
 
 if __name__ == "__main__":
-    if args.augment:
-        aug = [iaa.AdditiveGaussianNoise(scale=0.1*255), iaa.Affine(scale=(0.7, 1.0), translate_percent=(-0.1, 0.1), order=[0, 1], cval=(0, 255), mode=ia.ALL, rotate=(-3, 3)),iaa.EdgeDetect(alpha=(0.0, 0.5)),
-       iaa.PerspectiveTransform(scale=(0.01, 0.1)), ]
     refine_net = load_refinenet_model(cuda=True, weight_path=CONFIG["REFINER_WEIGHT"])
     craft_net = load_craftnet_model(cuda=True, weight_path=CONFIG["CRAFT_WEIGHT"])
     print('[INFO] Loading weight done!')
-    input_dir = args.input_dir
-    output_dir = args.output_dir
+
+    input_dir = args.input_dir 
+    last_path = os.path.basename(os.path.normpath(input_dir))
+    output_dir = input_dir.replace(last_path, "preprocessed_" + last_path)
+
     if os.path.exists(output_dir):
         shutil.rmtree(output_dir)
     os.mkdir(output_dir)
+
     for class_ in os.listdir(input_dir):
         print("[INFO] Processing class {}...".format(class_))        
         os.makedirs(os.path.join(output_dir, class_), exist_ok=True)
@@ -69,7 +60,10 @@ if __name__ == "__main__":
             ori_img = cv2.imread(img_path)
             final = pipeline(ori_img, craft_net, refine_net)
             cv2.imwrite(os.path.join(output_dir, class_, os.path.basename(img_path)), final)
+
             if args.augment:
+                aug = [iaa.AdditiveGaussianNoise(scale=0.1*255), iaa.Affine(scale=(0.7, 1.0), translate_percent=(-0.1, 0.1), order=[0, 1], cval=(0, 255), mode=ia.ALL, rotate=(-3, 3)),iaa.EdgeDetect(alpha=(0.0, 0.5)),
+                iaa.PerspectiveTransform(scale=(0.01, 0.1)), ]
                 for i in range(10):
                     num_of_augment = random.randint(1, 3)
                     augments = random.sample(range(len(aug)), k=num_of_augment)

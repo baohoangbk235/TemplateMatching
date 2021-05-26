@@ -23,6 +23,7 @@ from utils import get_labels, get_config, save_config
 from tensorboard_logger import log_value, configure
 from shutil import copyfile
 from Models.Classifier import KNNClassifier, FCNClassifier
+import pickle 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", help="data augmentation", type=str, default="config.yaml")
@@ -37,7 +38,6 @@ parser.add_argument("-o", "--optimizer", help="optimizer", type=str, default="ad
 parser.add_argument("-p", "--path", help="path to checkpoint", type=str, default=None)
 parser.add_argument("--emb_size", help="embedding size", type=int, default=20)
 parser.add_argument("--loss", help="loss type", type=str, default="hard_batch")
-parser.add_argument("--log", help="log history", type=bool, default=False)
 
 
 args = parser.parse_args()
@@ -45,8 +45,7 @@ args = parser.parse_args()
 warnings.filterwarnings('ignore')
 
 CONFIG = get_config(args.config)
-CONFIG["emb_size"] = args.emb_size
-CONFIG["config"] = dict(vars(args))
+CONFIG.update(dict(vars(args))) 
 
 label2int, int2label = get_labels(args.label_path)
 num_classes = len(int2label)
@@ -57,9 +56,9 @@ def valid_epoch(X_train, y_train, X_test, y_test):
     classifier.fit(X_train, y_train)
     train_acc = classifier.evaluate(X_train, y_train)
     valid_acc = classifier.evaluate(X_test, y_test)
-    return train_acc, valid_acc
+    return train_acc, valid_acc, classifier
 
-def train_one_epoch_hard_batch(epoch, train_loader, valid_loader, model, optimizer, scheduler, criterion):
+def train_one_epoch_hard_batch(epoch, train_loader, valid_loader, model, optimizer, scheduler, criterion, best_acc):
     device = args.device
 
     train_embs = []
@@ -70,7 +69,6 @@ def train_one_epoch_hard_batch(epoch, train_loader, valid_loader, model, optimiz
     val_labels = []
     val_loss = []
 
-    best_loss = 99999
     model.train()
     with tqdm(train_loader, unit="batch") as tepoch:
         for i, (images, labels) in enumerate(tepoch):
@@ -100,17 +98,21 @@ def train_one_epoch_hard_batch(epoch, train_loader, valid_loader, model, optimiz
         val_loss.append(loss.cpu().detach().numpy())
         del embs
 
-    train_acc, val_acc = valid_epoch(np.array(train_embs), np.array(train_labels), np.array(val_embs), np.array(val_labels))
+    train_acc, val_acc, classifier = valid_epoch(np.array(train_embs), np.array(train_labels), np.array(val_embs), np.array(val_labels))
     print("[DONE] Epoch {}/{} : train_loss: {:.4f}, val_loss: {:.4f}, train_acc: {:.4f}, val_acc: {:.4f}".format(epoch, args.epochs, np.mean(train_loss), np.mean(val_loss), train_acc, val_acc))
-    if np.mean(val_loss) < best_loss:
-        best_loss = np.mean(val_loss)
-        model_path = f'{CONFIG["model_path"]}/trained_model_{epoch}.pth'
+    
+    if val_acc > best_acc:
+        best_acc = val_acc
+        model_path = f'{CONFIG["model_path"]}/extractor.pth'
         print("[INFO] Saving model {}...".format(model_path))
         torch.save({"model_state_dict": model.state_dict(),
             "optimzier_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict()
         }, model_path)
-    return np.mean(train_loss), np.mean(val_loss), train_acc, val_acc
+        with open(os.path.join(CONFIG['model_path'], 'classifier.pkl'), 'wb') as f:
+            pickle.dump(classifier, f, pickle.HIGHEST_PROTOCOL)
+
+    return np.mean(train_loss), np.mean(val_loss), train_acc, val_acc, best_acc
 
 def train_one_epoch(epoch, dataloader, model, optimizer, scheduler, criterion, loss_history):
     device = args.device
@@ -186,15 +188,13 @@ def plot_history(train_loss, val_loss, train_acc, val_acc):
 
 
 def train():
-    isLogged = args.log
-    CONFIG['model_path'] = f'weights/{datetime.now().strftime("%m%d%Y_%H%M%S")}'
+    CONFIG['model_path'] = f'logs/{datetime.now().strftime("%m%d%Y_%H%M%S")}'
     if not os.path.exists(CONFIG["model_path"]):
         os.mkdir(CONFIG["model_path"])
-    if isLogged:
-        copyfile(args.label_path, f'{CONFIG["model_path"]}/labels.txt')
-        save_config(CONFIG, f'{CONFIG["model_path"]}/config.yaml')
 
-    
+    copyfile(args.label_path, f'{CONFIG["model_path"]}/labels.txt')
+    save_config(CONFIG, f'{CONFIG["model_path"]}/config.yaml')
+
     model = Network(args.emb_size)
     model.to(args.device)
     model.train()
@@ -213,7 +213,7 @@ def train():
 
     trainset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_train_transforms())  
     trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    validset = TemplateDataset(CONFIG["test_data"], label2int, transforms=get_train_transforms())  
+    validset = TemplateDataset(CONFIG["test_data"], label2int, transforms=get_train_transforms(), mode="valid")  
     validloader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
     if (args.path):
@@ -223,8 +223,9 @@ def train():
     history["val_loss"] = []
     history["train_acc"] = []
     history["val_acc"] = []
+    best_acc = -1
     for epoch in range(args.epochs):
-        train_loss, val_loss, train_acc, val_acc = train_one_epoch_hard_batch(epoch, trainloader, validloader, model, optimizer, scheduler, triplet_loss)
+        train_loss, val_loss, train_acc, val_acc, best_acc = train_one_epoch_hard_batch(epoch, trainloader, validloader, model, optimizer, scheduler, triplet_loss, best_acc)
         if isLogged:
             history["train_loss"].append(train_loss)
             history["val_loss"].append(val_loss)

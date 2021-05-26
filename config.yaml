@@ -4,3 +4,5 @@ labels: dataset/labels.txt
 train_data: dataset/preprocessed_train/
 val_data: dataset/val/preprocessed_val/
 test_data: dataset/preprocessed_test/
+raw_train_data: dataset/train/
+raw_val_data: dataset/val/
