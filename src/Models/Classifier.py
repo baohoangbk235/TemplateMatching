@@ -14,7 +14,7 @@ import numpy as np
 from utils import EarlyStopping
 from abc import ABC 
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
-
+import pickle 
 
 class BaseClassifier(ABC):
     @abstractmethod
@@ -42,7 +42,14 @@ class KNNClassifier(BaseClassifier):
 
     def test(self, X_test):
         return self.nbrs.predict(X_test)
+    
+    def save_model(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self.nbrs, f)
 
+    def load_model(self, path):
+        with open(path, 'rb') as f:
+            self.nbrs = pickle.load(f)
 
 class FCNClassifier(BaseClassifier):
     def __init__(self, input_dim, opt_type="adam", epochs=1000, device="cuda", patience=None, model_path=None):

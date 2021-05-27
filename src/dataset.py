@@ -28,15 +28,18 @@ class TemplateDataset(Dataset):
         self.label2int = label2int
 
         if not os.path.exists(root_dir):
-            exit()
+            exit("Not found {}".format(root_dir))
 
         self.all_img_paths = []
         self.all_labels = []
         print("[INFO] Processing dataset {}...".format(self.root_dir))
-        for i, label in enumerate(self.label2int.keys()): 
-            list_paths = glob.glob(os.path.join(self.root_dir, label, "*.jpg"))
-            self.all_img_paths.extend(list_paths)
-            self.all_labels.extend([self.label2int[label]] * len(list_paths))
+        if mode == "test": 
+            self.all_img_paths.extend(glob.glob(os.path.join(self.root_dir, "*.jpg"))) 
+        else:
+            for i, label in enumerate(self.label2int.keys()): 
+                list_paths = glob.glob(os.path.join(self.root_dir, label, "*.jpg"))
+                self.all_img_paths.extend(list_paths)
+                self.all_labels.extend([self.label2int[label]] * len(list_paths))
 
     def __len__(self):
         return len(self.all_img_paths)
@@ -49,15 +52,17 @@ class TemplateDataset(Dataset):
     def __getitem__(self, index: int):
         path = self.all_img_paths[index]
         image = self.get_img(path)
-        label = self.all_labels[index]
+
         if self.transforms:
             image = self.transforms(image=image)["image"]
-        if self.mode == "eval":
-            return image, label, path 
-        elif self.mode == "test":
-            return image, path 
 
-        return image, label
+        if self.mode == "test":
+            return image, path 
+        else:
+            label = self.all_labels[index]
+            if self.mode == "valid":
+                return image, label, path 
+            return image, label
 
 
 def collate_fn(batch):

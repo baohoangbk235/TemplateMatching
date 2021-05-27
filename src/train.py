@@ -4,7 +4,7 @@ import torchvision
 import torch.optim as optim
 from torch.optim import lr_scheduler
 from torch.utils.data import  DataLoader
-
+from sklearn.externals import joblib
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -24,6 +24,7 @@ from tensorboard_logger import log_value, configure
 from shutil import copyfile
 from Models.Classifier import KNNClassifier, FCNClassifier
 import pickle 
+warnings.filterwarnings('ignore')
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-c", "--config", help="data augmentation", type=str, default="config.yaml")
@@ -39,10 +40,7 @@ parser.add_argument("-p", "--path", help="path to checkpoint", type=str, default
 parser.add_argument("--emb_size", help="embedding size", type=int, default=20)
 parser.add_argument("--loss", help="loss type", type=str, default="hard_batch")
 
-
 args = parser.parse_args()
-
-warnings.filterwarnings('ignore')
 
 CONFIG = get_config(args.config)
 CONFIG.update(dict(vars(args))) 
@@ -109,8 +107,7 @@ def train_one_epoch_hard_batch(epoch, train_loader, valid_loader, model, optimiz
             "optimzier_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict()
         }, model_path)
-        with open(os.path.join(CONFIG['model_path'], 'classifier.pkl'), 'wb') as f:
-            pickle.dump(classifier, f, pickle.HIGHEST_PROTOCOL)
+        classifier.save_model(os.path.join(CONFIG["model_path"], "classifier.pkl"))
 
     return np.mean(train_loss), np.mean(val_loss), train_acc, val_acc, best_acc
 
@@ -213,7 +210,7 @@ def train():
 
     trainset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_train_transforms())  
     trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    validset = TemplateDataset(CONFIG["test_data"], label2int, transforms=get_train_transforms(), mode="valid")  
+    validset = TemplateDataset(CONFIG["valid_data"], label2int, transforms=get_train_transforms())  
     validloader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
     if (args.path):
@@ -226,12 +223,11 @@ def train():
     best_acc = -1
     for epoch in range(args.epochs):
         train_loss, val_loss, train_acc, val_acc, best_acc = train_one_epoch_hard_batch(epoch, trainloader, validloader, model, optimizer, scheduler, triplet_loss, best_acc)
-        if isLogged:
-            history["train_loss"].append(train_loss)
-            history["val_loss"].append(val_loss)
-            history["train_acc"].append(train_acc)
-            history["val_acc"].append(val_acc)
-            plot_history(**history)
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["train_acc"].append(train_acc)
+        history["val_acc"].append(val_acc)
+        plot_history(**history)
 
 if __name__ == "__main__":
     train()

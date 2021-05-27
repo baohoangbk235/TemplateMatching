@@ -142,3 +142,4 @@ results/
 weights/
 *.ipynb
 *.pkl
+logs/

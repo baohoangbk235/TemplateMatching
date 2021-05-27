@@ -2,7 +2,8 @@ REFINER_WEIGHT: weights/pretrained/craft_refiner_CTW1500.pth
 CRAFT_WEIGHT: weights/pretrained/1117_23.833.pth
 labels: dataset/labels.txt
 train_data: dataset/preprocessed_train/
-val_data: dataset/val/preprocessed_val/
+valid_data: dataset/preprocessed_valid/
 test_data: dataset/preprocessed_test/
 raw_train_data: dataset/train/
-raw_val_data: dataset/val/
+raw_val_data: dataset/valid/
+raw_test_data: dataset/test/
