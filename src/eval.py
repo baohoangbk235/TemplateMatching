@@ -121,30 +121,23 @@ class TemplateClassifier():
             embs, labels, paths = self.getEmbs(dataPath, valid)
         else:
             embs, paths = self.getEmbs(dataPath, valid)
-        predicts = self.classifier.test(embs)
+
+        predicts, probs = self.classifier.test(embs)
+
         if valid:
             acc = self.classifier.evaluate(embs, labels)
-            self.compareToVisualize(predicts, labels, paths)
+            self.compareToVisualize(predicts, probs, labels, paths)
             print(f'Valid Accuracy: {acc}')
         
         else:
-            for (pred, path) in zip(predicts, paths):
+            for (pred, prob, path) in zip(predicts, probs, paths):
                 pred_label = self.int2label[pred]
                 filename = os.path.basename(path)
                 ori_path = path.replace("preprocessed_", "")
                 shutil.copy(ori_path, os.path.join(resultDir, pred_label, filename))
 
-    def predict(self, img):
-        preprocessed = pipeline(img, self.craft_net, self.refine_net)
-        preprocessed = np.stack([preprocessed, preprocessed, preprocessed], axis=2)
-        transformed = get_train_transforms()(image=preprocessed)["image"]
-        emb = self.featureExtractor(transformed.unsqueeze(0).to(self.device))
-        predict = self.classifier.test(emb.cpu().detach().numpy())
-        print("result: {}".format(self.int2label[predict[0]]))
-        return self.int2label[predict[0]]
-
-    def compareToVisualize(self, predicts, groundTruths, paths):
-        for (pred, gt, path) in zip(predicts, groundTruths, paths):
+    def compareToVisualize(self, predicts, probs, groundTruths, paths):
+        for (pred, prob, gt, path) in zip(predicts, probs, groundTruths, paths):
             ori_path = path.replace("preprocessed_", "")
             img = cv2.imread(ori_path)
             filename = os.path.basename(path)
@@ -155,6 +148,15 @@ class TemplateClassifier():
                 plt.savefig(f'{self.result_dir}/trues/{filename}')
             else:
                 plt.savefig(f'{self.result_dir}/falses/{filename}')
+
+    def predict(self, img):
+        preprocessed = pipeline(img, self.craft_net, self.refine_net)
+        preprocessed = np.stack([preprocessed, preprocessed, preprocessed], axis=2)
+        transformed = get_train_transforms()(image=preprocessed)["image"]
+        emb = self.featureExtractor(transformed.unsqueeze(0).to(self.device))
+        predict, prob = self.classifier.test(emb.cpu().detach().numpy())
+        print("result: {} score: {}".format(self.int2label[predict[0]], prob[0][predict[0]]))
+        return self.int2label[predict[0]]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

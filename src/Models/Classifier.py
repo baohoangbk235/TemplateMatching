@@ -41,7 +41,7 @@ class KNNClassifier(BaseClassifier):
         return self.nbrs.score(X, y)
 
     def test(self, X_test):
-        return self.nbrs.predict(X_test)
+        return self.nbrs.predict(X_test), self.nbrs.predict_proba(X_test)
     
     def save_model(self, path):
         with open(path, 'wb') as f:
