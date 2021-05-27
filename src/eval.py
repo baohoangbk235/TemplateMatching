@@ -21,8 +21,16 @@ import os
 import pickle 
 import shutil
 from lib import pipeline
-
-
+from craft_text_detector import (
+    read_image,
+    load_craftnet_model,
+    load_refinenet_model,
+    get_prediction,
+    export_detected_regions,
+    export_extra_results,
+    empty_cuda_cache
+)
+from PIL import Image
 
 def most_frequent(List):
     occurence_count = Counter(List)
@@ -55,6 +63,8 @@ class TemplateClassifier():
         self.featureExtractor = self.getModel()
         self.classifierPath = os.path.join(model_dir, "classifier.pkl")
         self.classifier = self.get_classifier()
+        self.refine_net = load_refinenet_model(cuda=True, weight_path=self.CONFIG["REFINER_WEIGHT"])
+        self.craft_net = load_craftnet_model(cuda=True, weight_path=self.CONFIG["CRAFT_WEIGHT"])
     
     def get_classifier(self):
         classifier = KNNClassifier()
@@ -125,14 +135,15 @@ class TemplateClassifier():
                 shutil.copy(ori_path, os.path.join(resultDir, pred_label, filename))
 
     def predict(self, img):
-        preprocessed = pipeline(img)
-        emb = self.featureExtractor(get_train_transforms(preprocessed.convert('RGB')).unsqueeze(0).to(self.device))
-        predict = self.classifier.predict(emb.cpu().detach().numpy())
-        cv2.imwrite('result: ', self.int2label[predict[0]])
+        preprocessed = pipeline(img, self.craft_net, self.refine_net)
+        preprocessed = np.stack([preprocessed, preprocessed, preprocessed], axis=2)
+        transformed = get_train_transforms()(image=preprocessed)["image"]
+        emb = self.featureExtractor(transformed.unsqueeze(0).to(self.device))
+        predict = self.classifier.test(emb.cpu().detach().numpy())
+        print("result: {}".format(self.int2label[predict[0]]))
         return self.int2label[predict[0]]
 
     def compareToVisualize(self, predicts, groundTruths, paths):
-        
         for (pred, gt, path) in zip(predicts, groundTruths, paths):
             ori_path = path.replace("preprocessed_", "")
             img = cv2.imread(ori_path)
@@ -159,4 +170,5 @@ if __name__ == "__main__":
             templateClassifier.run(args.input_path, valid=False)
     else:
         img = cv2.imread(args.input_path)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         templateClassifier.predict(img)
