@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 from torchvision import  models, transforms
-from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
+from TemplateMatching.src.dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
 import yaml 
-from utils import load_checkpoint, get_labels
+from TemplateMatching.src.utils import load_checkpoint, get_labels
 import argparse
 import re 
 from torch.optim import lr_scheduler

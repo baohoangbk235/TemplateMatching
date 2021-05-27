@@ -1,7 +1,7 @@
-from network import Classifier, Network
-from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms, collate_fn_test
-from utils import load_checkpoint, get_labels, get_config
-from Models.Classifier import KNNClassifier, FCNClassifier
+from TemplateMatching.src.network import Classifier, Network
+from TemplateMatching.src.dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms, collate_fn_test
+from TemplateMatching.src.utils import load_checkpoint, get_labels, get_config
+from TemplateMatching.src.Models.Classifier import KNNClassifier, FCNClassifier
 import yaml 
 import argparse
 import re 
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 import os
 import pickle 
 import shutil
-from lib import pipeline
+from TemplateMatching.src.lib import pipeline
 from craft_text_detector import (
     read_image,
     load_craftnet_model,
@@ -60,9 +60,7 @@ class TemplateClassifier():
         self.result_dir = result_dir
         self.createResultDir()
         self.featureExtractorPath = os.path.join(model_dir, "extractor.pth")
-        self.featureExtractor = self.getModel()
         self.classifierPath = os.path.join(model_dir, "classifier.pkl")
-        self.classifier = self.get_classifier()
         self.refine_net = load_refinenet_model(cuda=True, weight_path=self.CONFIG["REFINER_WEIGHT"])
         self.craft_net = load_craftnet_model(cuda=True, weight_path=self.CONFIG["CRAFT_WEIGHT"])
     
@@ -151,6 +149,8 @@ class TemplateClassifier():
 
     def predict(self, img):
         preprocessed = pipeline(img, self.craft_net, self.refine_net)
+        self.featureExtractor = self.getModel()
+        self.classifier = self.get_classifier()
         preprocessed = np.stack([preprocessed, preprocessed, preprocessed], axis=2)
         transformed = get_train_transforms()(image=preprocessed)["image"]
         emb = self.featureExtractor(transformed.unsqueeze(0).to(self.device))

@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
-from network import Classifier, Network
-from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
-from utils import load_checkpoint, get_labels, get_config
+from TemplateMatching.src.network import Classifier, Network
+from TemplateMatching.src.dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
+from TemplateMatching.src.utils import load_checkpoint, get_labels, get_config
 import argparse
 from torch.optim import lr_scheduler
 import torch.optim as optim
@@ -11,7 +11,7 @@ import torch.nn as nn
 from torch.utils.data import  DataLoader
 from tqdm import tqdm 
 import numpy as np 
-from utils import EarlyStopping
+from TemplateMatching.src.utils import EarlyStopping
 from abc import ABC 
 from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 import pickle 
@@ -41,7 +41,7 @@ class KNNClassifier(BaseClassifier):
         return self.nbrs.score(X, y)
 
     def test(self, X_test):
-        return self.nbrs.predict(X_test), self.nbrs.predict_proba(X_test)
+        return self.nbrs.predict(X_test), self.nbrs.kneighbors(X_test)[0]
     
     def save_model(self, path):
         with open(path, 'wb') as f:
