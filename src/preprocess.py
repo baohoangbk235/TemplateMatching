@@ -49,7 +49,6 @@ if __name__ == "__main__":
 
     aug = [iaa.AdditiveGaussianNoise(scale=0.1*255), iaa.Affine(scale=(0.7, 1.0), translate_percent=(-0.1, 0.1), order=[0, 1], cval=(0, 255), mode=ia.ALL, rotate=(-3, 3)),iaa.EdgeDetect(alpha=(0.0, 0.5)),
                 iaa.PerspectiveTransform(scale=(0.01, 0.1)), ]
-    refine_net = load_refinenet_model(cuda=True, weight_path=CONFIG["REFINER_WEIGHT"])
     craft_net = load_craftnet_model(cuda=True, weight_path=CONFIG["CRAFT_WEIGHT"])
     print('[INFO] Loading weight done!')
 
@@ -64,7 +63,7 @@ if __name__ == "__main__":
     if args.mode == "test":
         for image_path in glob.glob(os.path.join(input_dir, '*')):
             ori_img = cv2.imread(image_path)
-            final = pipeline(ori_img, craft_net, refine_net)
+            final = pipeline(ori_img, craft_net)
             filename = os.path.basename(image_path)
             cv2.imwrite(os.path.join(output_dir, filename), final)
     else:
@@ -76,7 +75,7 @@ if __name__ == "__main__":
             for img_filename in img_filenames:
                 img_path = os.path.join(class_path, img_filename)
                 ori_img = cv2.imread(img_path)
-                final = pipeline(ori_img, craft_net, refine_net)
+                final = pipeline(ori_img, craft_net)
                 cv2.imwrite(os.path.join(output_dir, class_, os.path.basename(img_path)), final)
                 if args.mode == "train":
                     for i in range(10):

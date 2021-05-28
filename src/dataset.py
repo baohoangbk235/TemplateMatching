@@ -6,6 +6,7 @@ import glob
 from torch.utils.data import Dataset
 import albumentations as A 
 from albumentations.pytorch.transforms import ToTensorV2
+from imgaug import augmenters as iaa
 import torch
 
 class EmbeddingDataset(Dataset):
@@ -86,6 +87,23 @@ def collate_fn_test(batch):
     return images_list, image_paths
 
 def get_train_transforms():
+    random.seed(23)
+    return A.Compose([
+        A.IAAAdditiveGaussianNoise(scale=0.1*255), 
+        A.imgaug.transforms.IAAAffine(scale=(0.7, 1.0), 
+                                    translate_percent=(-0.1, 0.1), 
+                                    order=[0, 1], 
+                                    cval=(0, 255), 
+                                    rotate=(-3, 3)),
+        A.imgaug.transforms.IAAPerspective(scale=(0.01, 0.1)),
+        A.RandomBrightnessContrast(p=0.2),
+        A.Resize(512, 512), 
+        A.Normalize(mean=[0.485, 0.456, 0.406],
+                                std=[0.229, 0.224, 0.225]),
+        ToTensorV2(),
+    ]) 
+
+def get_test_transforms():
     return A.Compose([
         A.Resize(512, 512), 
         A.Normalize(mean=[0.485, 0.456, 0.406],

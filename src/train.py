@@ -18,7 +18,7 @@ from tqdm import trange, tqdm
 import warnings
 from datetime import datetime
 from network import Network, Identity, TripletLoss, HardBatchTripletLoss
-from dataset import TemplateDataset, collate_fn, get_train_transforms
+from dataset import TemplateDataset, collate_fn, get_train_transforms, get_test_transforms
 from utils import get_labels, get_config, save_config
 from tensorboard_logger import log_value, configure
 from shutil import copyfile
@@ -50,7 +50,7 @@ num_classes = len(int2label)
 
 def valid_epoch(X_train, y_train, X_test, y_test):
     global num_classes
-    classifier = KNNClassifier()
+    classifier = KNNClassifier(3)
     classifier.fit(X_train, y_train)
     train_acc = classifier.evaluate(X_train, y_train)
     valid_acc = classifier.evaluate(X_test, y_test)
@@ -208,9 +208,9 @@ def train():
 
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step_change_lr, gamma=0.5)
 
-    trainset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_train_transforms())  
+    trainset = TemplateDataset(CONFIG["train_data"], label2int, transforms=get_test_transforms())  
     trainloader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=2)
-    validset = TemplateDataset(CONFIG["valid_data"], label2int, transforms=get_train_transforms())  
+    validset = TemplateDataset(CONFIG["valid_data"], label2int, transforms=get_test_transforms())  
     validloader = DataLoader(validset, batch_size=args.batch_size, shuffle=True, num_workers=2)
 
     if (args.path):

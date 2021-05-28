@@ -159,11 +159,10 @@ def filter(coords, shape):
         a.append(int(c))
     return a
 
-def extract_text(img, craft_net, refine_net, clt):
+def extract_text(img, craft_net, clt):
     prediction_result = get_prediction(
                 image=img,
                 craft_net=craft_net,
-                # refine_net=refine_net,
                 text_threshold=0.01,
                 link_threshold=0.4,
                 low_text=0.4,
@@ -231,10 +230,10 @@ def visualize(titles, images, row=2, col=2):
         plt.title(titles[i])
     plt.show()
 
-def pipeline(ori_img, craft_net, refine_net, show_img=False):
+def pipeline(ori_img, craft_net, show_img=False):
     clt = KMeans(n_clusters = 3)
     removed_line, extracted_line = extract_line(ori_img)
-    extracted_text = extract_text(removed_line, craft_net, refine_net, clt)
+    extracted_text = extract_text(removed_line, craft_net, clt)
     final = extract_dotline(extracted_text, extracted_line)
     if show_img:
         visualize(["Origin", "Final"], [ori_img, final], 1, 2)

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
+from sklearn.cluster import KMeans
 from network import Classifier, Network
 from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms
 from utils import load_checkpoint, get_labels, get_config
@@ -30,9 +30,9 @@ class BaseClassifier(ABC):
         pass 
 
 class KNNClassifier(BaseClassifier):
-    def __init__(self):
+    def __init__(self, n_neighbors=1):
         super().__init__()
-        self.nbrs = KNeighborsClassifier(n_neighbors=1)
+        self.nbrs = KNeighborsClassifier(n_neighbors=n_neighbors)
 
     def fit(self, X_train, y_train):
         self.nbrs.fit(X_train, y_train)
@@ -41,7 +41,7 @@ class KNNClassifier(BaseClassifier):
         return self.nbrs.score(X, y)
 
     def test(self, X_test):
-        return self.nbrs.predict(X_test), self.nbrs.predict_proba(X_test)
+        return self.nbrs.predict(X_test), self.nbrs.kneighbors(X_test)[0]
     
     def save_model(self, path):
         with open(path, 'wb') as f:
@@ -50,6 +50,30 @@ class KNNClassifier(BaseClassifier):
     def load_model(self, path):
         with open(path, 'rb') as f:
             self.nbrs = pickle.load(f)
+
+class KMeansClassifier(BaseClassifier):
+    def __init__(self, n_clusters):
+        super().__init__()
+        self.kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+
+    def fit(self, X_train, y_train):
+        self.kmeans.fit(X_train, y_train)
+        return self.kmeans.labels_
+
+    def evaluate(self, X, y):
+        return self.nbrs.score(X, y)
+
+    def test(self, X_test):
+        return self.nbrs.predict(X_test), self.nbrs.kneighbors(X_test)[0]
+    
+    def save_model(self, path):
+        with open(path, 'wb') as f:
+            pickle.dump(self.nbrs, f)
+
+    def load_model(self, path):
+        with open(path, 'rb') as f:
+            self.nbrs = pickle.load(f)
+
 
 class FCNClassifier(BaseClassifier):
     def __init__(self, input_dim, opt_type="adam", epochs=1000, device="cuda", patience=None, model_path=None):

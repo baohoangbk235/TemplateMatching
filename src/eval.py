@@ -1,5 +1,5 @@
 from network import Classifier, Network
-from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms, collate_fn_test
+from dataset import EmbeddingDataset, TemplateDataset, collate_fn, get_train_transforms, get_test_transforms,collate_fn_test
 from utils import load_checkpoint, get_labels, get_config
 from Models.Classifier import KNNClassifier, FCNClassifier
 import yaml 
@@ -12,8 +12,7 @@ import torch.nn as nn
 from torch.utils.data import  DataLoader
 from tqdm import tqdm 
 import numpy as np 
-from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
-from sklearn.cluster import KMeans
+from sklearn.metrics import accuracy_score
 from collections import Counter
 import cv2 
 import matplotlib.pyplot as plt 
@@ -63,8 +62,17 @@ class TemplateClassifier():
         self.featureExtractor = self.getModel()
         self.classifierPath = os.path.join(model_dir, "classifier.pkl")
         self.classifier = self.get_classifier()
-        self.refine_net = load_refinenet_model(cuda=True, weight_path=self.CONFIG["REFINER_WEIGHT"])
         self.craft_net = load_craftnet_model(cuda=True, weight_path=self.CONFIG["CRAFT_WEIGHT"])
+        self.threshold = [
+            0.15658274643186937,
+            0.36065899509540494,
+            0.38856512542345073,
+            0.40749227647561814,
+            0.16654823949181954,
+            0.1937299593585302,
+            0.11403658569607081,
+            0.45526403121798326,
+        ]
     
     def get_classifier(self):
         classifier = KNNClassifier()
@@ -90,10 +98,11 @@ class TemplateClassifier():
         list_embs = []
         list_paths = []
         list_labels = []
+        self.featureExtractor.to(self.device)
         if not valid:
             print("Testing ...")
-            dataset = TemplateDataset(dataPath, self.label2int, transforms=get_train_transforms(), mode="test") 
-            loader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=collate_fn_test)
+            dataset = TemplateDataset(dataPath, self.label2int, transforms=get_test_transforms(), mode="test") 
+            loader = DataLoader(dataset, batch_size=16, collate_fn=collate_fn_test)
             for i, (images, paths) in enumerate(loader):
                 anchors = torch.stack(images, axis=0)
                 anchors = anchors.to(args.device)
@@ -101,11 +110,12 @@ class TemplateClassifier():
                 list_embs.extend(list(anchor_emb.cpu().detach().numpy()))
                 list_paths.extend(paths)
                 del anchor_emb
+            self.featureExtractor.to("cpu")
             return list_embs, list_paths
         else:
             print("Evaluating ...")
-            dataset = TemplateDataset(dataPath, self.label2int, transforms=get_train_transforms(), mode="valid") 
-            loader = DataLoader(dataset, batch_size=16, shuffle=True, collate_fn=collate_fn)
+            dataset = TemplateDataset(dataPath, self.label2int, transforms=get_test_transforms(), mode="valid") 
+            loader = DataLoader(dataset, batch_size=16, collate_fn=collate_fn)
             for i, (images, labels,  paths) in enumerate(loader):
                 anchors = torch.stack(images, axis=0)
                 anchors = anchors.to(self.device)
@@ -114,20 +124,31 @@ class TemplateClassifier():
                 list_labels.extend(labels)
                 list_paths.extend(paths)
                 del anchor_emb
+            self.featureExtractor.to("cpu")
             return list_embs, list_labels, list_paths
 
     def run(self, dataPath, valid=False):
+        print("[INFO] Calculating embeddings ...")
         if valid:
             embs, labels, paths = self.getEmbs(dataPath, valid)
+            with open(os.path.join(self.model_dir, 'X.pkl'), 'wb') as f:
+                pickle.dump(embs, f)
+            with open(os.path.join(self.model_dir, 'y.pkl'), 'wb') as f:
+                pickle.dump(labels, f)
+            with open(os.path.join(self.model_dir, 'path.pkl'), 'wb') as f:
+                pickle.dump(paths, f)  
         else:
             embs, paths = self.getEmbs(dataPath, valid)
 
+        print("[INFO] Classifying embeddings ...")
+
         predicts, probs = self.classifier.test(embs)
 
+        print("[INFO] Visualizing results ...")
         if valid:
-            acc = self.classifier.evaluate(embs, labels)
-            self.compareToVisualize(predicts, probs, labels, paths)
+            acc = accuracy_score(predicts, labels)
             print(f'Valid Accuracy: {acc}')
+            self.compareToVisualize(predicts, probs, labels, paths)
         
         else:
             for (pred, prob, path) in zip(predicts, probs, paths):
@@ -137,26 +158,37 @@ class TemplateClassifier():
                 shutil.copy(ori_path, os.path.join(resultDir, pred_label, filename))
 
     def compareToVisualize(self, predicts, probs, groundTruths, paths):
-        for (pred, prob, gt, path) in zip(predicts, probs, groundTruths, paths):
-            ori_path = path.replace("preprocessed_", "")
+        for i in range(len(predicts)):
+            ori_path = paths[i].replace("preprocessed_", "")
             img = cv2.imread(ori_path)
-            filename = os.path.basename(path)
+            if img is None:
+                continue
             plt.figure(figsize=(20,20))
-            plt.xlabel("{} - Ground truth: {} - Predict: {}".format(filename, self.int2label[gt], self.int2label[pred]), fontsize=25)
-            plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-            if (pred == gt):
+            plt.xlabel("{} - Ground truth: {} - Predict: {}".format(ori_path, self.int2label[groundTruths[i]], self.int2label[predicts[i]]), fontsize=25)
+            if len(img.shape) == 3:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            plt.imshow(img)
+            
+            filename = os.path.basename(paths[i])
+            if (predicts[i] == groundTruths[i]):
                 plt.savefig(f'{self.result_dir}/trues/{filename}')
             else:
                 plt.savefig(f'{self.result_dir}/falses/{filename}')
 
     def predict(self, img):
-        preprocessed = pipeline(img, self.craft_net, self.refine_net)
+        preprocessed = pipeline(img, self.craft_net)
+        self.featureExtractor.to(self.device)
         preprocessed = np.stack([preprocessed, preprocessed, preprocessed], axis=2)
         transformed = get_train_transforms()(image=preprocessed)["image"]
         emb = self.featureExtractor(transformed.unsqueeze(0).to(self.device))
-        predict, prob = self.classifier.test(emb.cpu().detach().numpy())
-        print("result: {} score: {}".format(self.int2label[predict[0]], prob[0][predict[0]]))
-        return self.int2label[predict[0]]
+        self.featureExtractor.to("cpu")
+        predict, distance = self.classifier.test(emb.cpu().detach().numpy())
+        if distance[0][0] > self.threshold[predict[0]]:
+            label = "Unknown"
+        else:
+            label = self.int2label[predict[0]]
+        print("result: {} score: {}\n{}, {}".format(label, distance[0][0], self.int2label[predict[0]], self.threshold[predict[0]]))
+        return label
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -165,12 +197,15 @@ if __name__ == "__main__":
     parser.add_argument("--valid", help="valid or test", type=bool, default=False)
     args = parser.parse_args()
     templateClassifier = TemplateClassifier(args.model_dir)
-    if os.path.isdir(args.input_path):
-        if args.valid:
-            templateClassifier.run(args.input_path, valid=True)
+    if os.path.exists(args.input_path):
+        if os.path.isdir(args.input_path):
+            if args.valid:
+                templateClassifier.run(args.input_path, valid=True)
+            else:
+                templateClassifier.run(args.input_path, valid=False)
         else:
-            templateClassifier.run(args.input_path, valid=False)
+            img = cv2.imread(args.input_path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            templateClassifier.predict(img)
     else:
-        img = cv2.imread(args.input_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        templateClassifier.predict(img)
+        raise Exception("The file doesnt exist")
